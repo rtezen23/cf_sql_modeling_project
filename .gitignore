@@ -26,7 +26,7 @@ wheels/
 *.egg
 
 # Base de datos SQLite
-tienda.db
+# tienda.db
 
 # Configuración de IDE
 .vscode/
