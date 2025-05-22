@@ -1,14 +1,49 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
-import plotly.express as px
+
+def get_db_connection():
+    """Establece conexión con la base de datos SQLite."""
+    try:
+        conn = sqlite3.connect('tienda.db')
+        # Verificar si la conexión es válida
+        conn.cursor().execute('SELECT 1')
+        return conn
+    except sqlite3.Error as e:
+        st.error(f"Error al conectar a la base de datos: {e}")
+        st.warning("Asegúrate de que el archivo 'tienda.db' existe en el directorio del proyecto.")
+        return None
+
+def execute_query(query, params=None):
+    """Ejecuta una consulta SQL y devuelve los resultados en un DataFrame."""
+    conn = get_db_connection()
+    if conn is None:
+        return pd.DataFrame()  # Retorna un DataFrame vacío si no hay conexión
+        
+    try:
+        if params:
+            df = pd.read_sql_query(query, conn, params=params)
+        else:
+            df = pd.read_sql_query(query, conn)
+        return df
+    except sqlite3.Error as e:
+        st.error(f"Error al ejecutar la consulta: {e}")
+        st.code(query)  # Muestra la consulta que falló
+        return pd.DataFrame()  # Retorna un DataFrame vacío en caso de error
+    finally:
+        if conn:
+            conn.close()
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Análisis de Ventas - Tienda",
+    page_title="Examen SQL - Tienda",
     page_icon="📊",
     layout="wide"
 )
+
+# Título de la aplicación
+st.title("📊 Examen SQL - Análisis de Tienda")
+st.markdown("---")
 
 def get_db_connection():
     """Establece conexión con la base de datos SQLite."""
@@ -46,232 +81,211 @@ def execute_query(query, params=None):
 st.title("📊 Análisis de Ventas - Tienda de Abarrotes y Papelería")
 st.markdown("---")
 
-# Crear pestañas para cada consulta
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "Productos más vendidos",
-    "Clientes más frecuentes",
-    "Categorías más populares",
-    "Clientes por categoría",
-    "Ventas por mes",
-    "Productos por proveedor"
+# Crear pestañas para cada pregunta del examen
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "1. Productos más vendidos",
+    "2. Clientes más frecuentes",
+    "3. Categoría más popular",
+    "4. Cliente estrella por categoría",
+    "5. Proveedores más utilizados",
+    "6. Categorías más rentables",
+    "7. Mayor compra en cantidad"
 ])
 
-# Consulta 1: Productos más vendidos
+# Pregunta 1: Productos más vendidos
 with tab1:
-    st.header("1. Productos más vendidos")
-    query = """
-    SELECT dv.id_producto, p.nombre_producto, COUNT(*) as ventas
+    st.header("1. ¿Cuáles son los productos más vendidos?")
+    
+    # Mostrar la consulta SQL
+    sql_query = """
+    SELECT dv.id_producto, p.nombre_producto, count(*) as 'n° ventas'
     FROM detalle_ventas dv
     INNER JOIN productos p ON p.id_producto = dv.id_producto
     GROUP BY dv.id_producto
-    ORDER BY ventas DESC
+    ORDER BY 3 DESC
     LIMIT 5
     """
-    df = execute_query(query)
     
+    with st.expander("🔍 Ver consulta SQL"):
+        st.code(sql_query, language="sql")
+    
+    # Ejecutar y mostrar resultados
+    df = execute_query(sql_query)
     if not df.empty:
-        # Mostrar tabla
         st.dataframe(df, use_container_width=True)
-        
-        # Mostrar gráfico de barras
-        fig = px.bar(df, x='nombre_producto', y='ventas',
-                    title='Top 5 Productos Más Vendidos',
-                    labels={'nombre_producto': 'Producto', 'ventas': 'N° de Ventas'})
-        st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("No se encontraron datos para mostrar.")
 
-# Consulta 2: Clientes con más compras
+# Pregunta 2: Clientes más frecuentes
 with tab2:
-    st.header("2. Clientes más frecuentes")
-    query = """
-    SELECT v.id_cliente, c.nombre, COUNT(*) as total_compras, 
+    st.header("2. ¿Qué clientes han realizado más compras y cuánto han gastado en total?")
+    
+    # Mostrar la consulta SQL
+    sql_query = """
+    SELECT v.id_cliente, c.nombre, count(*) as 'total_compras', 
            SUM(dv.precio_unitario * dv.cantidad) as total_gastado
     FROM ventas v
     INNER JOIN detalle_ventas dv ON dv.id_venta = v.id_venta
     INNER JOIN clientes c ON v.id_cliente = c.id_cliente
-    WHERE v.id_cliente IS NOT NULL
     GROUP BY v.id_cliente
+    HAVING v.id_cliente IS NOT NULL
     ORDER BY total_compras DESC
     LIMIT 3
     """
-    df = execute_query(query)
     
+    with st.expander("🔍 Ver consulta SQL"):
+        st.code(sql_query, language="sql")
+    
+    # Ejecutar y mostrar resultados
+    df = execute_query(sql_query)
     if not df.empty:
-        # Mostrar tabla
         st.dataframe(df.style.format({"total_gastado": "S/. {:.2f}"}), use_container_width=True)
-        
-        # Mostrar gráfico de barras
-        fig = px.bar(df, x='nombre', y='total_gastado',
-                    title='Clientes con Mayor Gasto Total',
-                    labels={'nombre': 'Cliente', 'total_gastado': 'Total Gastado (S/.)'})
-        st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("No se encontraron datos para mostrar.")
 
-# Consulta 3: Categorías más populares
+# Pregunta 3: Categoría más popular
 with tab3:
-    st.header("3. Categorías más populares")
-    query = """
-    SELECT ca.id_categoria, ca.nombre_categoria, COUNT(*) as ventas 
+    st.header("3. ¿Cuál es la categoría más popular en ventas?")
+    
+    # Mostrar la consulta SQL
+    sql_query = """
+    SELECT ca.id_categoria, ca.nombre_categoria, count(*) as 'n° ventas' 
     FROM detalle_ventas dv
     INNER JOIN productos p ON dv.id_producto = p.id_producto
     INNER JOIN categorias ca ON p.id_categoria = ca.id_categoria
     GROUP BY ca.id_categoria
-    ORDER BY ventas DESC
-    LIMIT 5
+    ORDER BY 3 DESC
+    LIMIT 1
     """
-    df = execute_query(query)
     
+    with st.expander("🔍 Ver consulta SQL"):
+        st.code(sql_query, language="sql")
+    
+    # Ejecutar y mostrar resultados
+    df = execute_query(sql_query)
     if not df.empty:
-        # Mostrar tabla
         st.dataframe(df, use_container_width=True)
-        
-        # Mostrar gráfico de pastel
-        fig = px.pie(df, values='ventas', names='nombre_categoria',
-                    title='Distribución de Ventas por Categoría')
-        st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("No se encontraron datos para mostrar.")
 
-# Consulta 4: Clientes por categoría
+# Pregunta 4: Cliente estrella por categoría
 with tab4:
-    st.header("4. Clientes por categoría")
+    st.header("4. ¿Qué cliente ha realizado más compras de la categoría más popular?")
     
-    # Primero obtenemos las categorías para el selector
-    categorias = execute_query("SELECT id_categoria, nombre_categoria FROM categorias")
-    categoria_seleccionada = st.selectbox(
-        'Selecciona una categoría:',
-        categorias['nombre_categoria'].tolist()
-    )
-    
-    # Obtenemos el ID de la categoría seleccionada
-    categoria_id = categorias[categorias['nombre_categoria'] == categoria_seleccionada]['id_categoria'].iloc[0]
-    
-    # Consulta para obtener los clientes de la categoría seleccionada
-    query = """
-    SELECT cli.nombre, COUNT(*) as compras, 
-           SUM(dv.precio_unitario * dv.cantidad) as total_gastado
+    # Mostrar la consulta SQL
+    sql_query = """
+    SELECT cli.nombre, cat.nombre_categoria, COUNT(*) as 'n° ventas' 
     FROM detalle_ventas dv
     INNER JOIN productos p ON dv.id_producto = p.id_producto
-    INNER JOIN ventas v ON dv.id_venta = v.id_venta
+    INNER JOIN categorias cat ON p.id_categoria = cat.id_categoria
+    INNER JOIN ventas v on dv.id_venta = v.id_venta
     INNER JOIN clientes cli ON v.id_cliente = cli.id_cliente
-    WHERE p.id_categoria = ?
-    GROUP BY cli.nombre
-    ORDER BY compras DESC
-    LIMIT 5
-    """
-    df = execute_query(query, (categoria_id,))
-    
-    if not df.empty:
-        st.subheader(f"Clientes en la categoría: {categoria_seleccionada}")
-        st.dataframe(df.style.format({"total_gastado": "S/. {:.2f}"}), use_container_width=True)
-        
-        # Mostrar gráfico de barras
-        if len(df) > 0:
-            fig = px.bar(df, x='nombre', y='compras',
-                       title=f'Clientes con más compras en {categoria_seleccionada}',
-                       labels={'nombre': 'Cliente', 'compras': 'N° de Compras'})
-            st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning(f"No se encontraron clientes para la categoría {categoria_seleccionada}.")
-
-# Consulta 5: Ventas por mes
-with tab5:
-    st.header("5. Ventas por mes")
-    query = """
-    SELECT strftime('%Y-%m', v.fecha_venta) as mes,
-           COUNT(DISTINCT v.id_venta) as total_ventas,
-           SUM(dv.precio_unitario * dv.cantidad) as monto_total
-    FROM ventas v
-    INNER JOIN detalle_ventas dv ON v.id_venta = dv.id_venta
-    GROUP BY mes
-    ORDER BY mes
-    """
-    df = execute_query(query)
-    
-    if not df.empty:
-        # Mostrar tabla
-        st.dataframe(df.style.format({"monto_total": "S/. {:.2f}"}), use_container_width=True)
-        
-        # Mostrar gráfico de líneas
-        fig = px.line(df, x='mes', y='monto_total',
-                     title='Evolución de Ventas Mensuales',
-                     labels={'mes': 'Mes', 'monto_total': 'Monto Total (S/.)'})
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("No se encontraron datos de ventas por mes.")
-
-# Consulta 6: Productos por proveedor
-with tab6:
-    st.header("6. Productos por proveedor")
-    
-    # Primero obtenemos los proveedores para el selector
-    proveedores = execute_query("""
-        SELECT id_proveedor, nombre_proveedor 
-        FROM proveedores 
-        ORDER BY nombre_proveedor
-    """)
-    
-    if proveedores.empty or 'nombre_proveedor' not in proveedores.columns:
-        st.warning("No se encontraron proveedores en la base de datos o la estructura no es la esperada.")
-        st.stop()
-    
-    proveedor_seleccionado = st.selectbox(
-        'Selecciona un proveedor:',
-        proveedores['nombre_proveedor'].tolist()
-    )
-    
-    # Obtenemos el ID del proveedor seleccionado
-    proveedor_id = proveedores[proveedores['nombre_proveedor'] == proveedor_seleccionado]['id_proveedor'].iloc[0]
-    
-    # Consulta para obtener los productos del proveedor seleccionado
-    query = """
-    SELECT p.id_producto, p.nombre_producto, p.precio_venta, 
-           COUNT(DISTINCT dv.id_detalle_venta) as veces_vendido,
-           IFNULL(SUM(dv.cantidad), 0) as unidades_vendidas,
-           IFNULL(SUM(dv.precio_unitario * dv.cantidad), 0) as ingreso_total
-    FROM productos p
-    INNER JOIN detalle_compras dc ON p.id_producto = dc.id_producto
-    INNER JOIN compras c ON dc.id_compra = c.id_compra
-    LEFT JOIN detalle_ventas dv ON p.id_producto = dv.id_producto
-    WHERE c.id_proveedor = ?
-    GROUP BY p.id_producto, p.nombre_producto, p.precio_venta
-    ORDER BY veces_vendido DESC
-    """
-    df = execute_query(query, (proveedor_id,))
-    
-    if not df.empty:
-        st.subheader(f"Productos del proveedor: {proveedor_seleccionado}")
-        
-        # Formatear la tabla
-        df_display = df.copy()
-        df_display = df_display.rename(columns={
-            'id_producto': 'ID',
-            'nombre_producto': 'Producto',
-            'precio_venta': 'Precio',
-            'veces_vendido': 'Veces Vendido',
-            'unidades_vendidas': 'Unidades Vendidas',
-            'ingreso_total': 'Ingreso Total'
-        })
-        
-        # Mostrar tabla con formato
-        st.dataframe(
-            df_display.style.format({
-                'Precio': 'S/. {:.2f}',
-                'Ingreso Total': 'S/. {:.2f}'
-            }),
-            use_container_width=True
+    GROUP BY cli.nombre, cat.nombre_categoria
+    HAVING cat.nombre_categoria = ( 
+        SELECT nombre_categoria FROM (
+            SELECT ca.id_categoria, ca.nombre_categoria, count(*) as ventas 
+            FROM detalle_ventas dv
+            INNER JOIN productos p ON dv.id_producto = p.id_producto
+            INNER JOIN categorias ca ON p.id_categoria = ca.id_categoria
+            GROUP BY ca.id_categoria
+            ORDER BY 3 DESC
+            LIMIT 1
         )
-        
-        # Mostrar gráfico de barras
-        if len(df) > 0:
-            fig = px.bar(df, x='nombre_producto', y='veces_vendido',
-                       title=f'Productos más vendidos de {proveedor_seleccionado}',
-                       labels={'nombre_producto': 'Producto', 'veces_vendido': 'Veces Vendido'})
-            st.plotly_chart(fig, use_container_width=True)
+    )
+    ORDER BY 3 DESC
+    LIMIT 1
+    """
+    
+    with st.expander("🔍 Ver consulta SQL"):
+        st.code(sql_query, language="sql")
+    
+    # Ejecutar y mostrar resultados
+    df = execute_query(sql_query)
+    if not df.empty:
+        st.dataframe(df, use_container_width=True)
     else:
-        st.warning(f"No se encontraron productos para el proveedor {proveedor_seleccionado}.")
+        st.warning("No se encontraron datos para mostrar.")
+
+# Pregunta 5: Proveedores más utilizados
+with tab5:
+    st.header("5. ¿Qué proveedores han sido más utilizados y cuántas compras se han realizado a cada uno?")
+    
+    # Mostrar la consulta SQL
+    sql_query = """
+    SELECT prov.nombre_proveedor, COUNT(*) as 'n° compras'
+    FROM detalle_compras dc
+    INNER JOIN compras c ON dc.id_compra = c.id_compra
+    INNER JOIN proveedores prov ON c.id_proveedor = prov.id_proveedor
+    GROUP BY prov.nombre_proveedor
+    ORDER BY 2 DESC
+    """
+    
+    with st.expander("🔍 Ver consulta SQL"):
+        st.code(sql_query, language="sql")
+    
+    # Ejecutar y mostrar resultados
+    df = execute_query(sql_query)
+    if not df.empty:
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.warning("No se encontraron datos para mostrar.")
+
+# Pregunta 6: Categorías más rentables
+with tab6:
+    st.header("6. ¿Qué categorías de productos generan más ingresos en ventas?")
+    
+    # Mostrar la consulta SQL
+    sql_query = """
+    SELECT ca.id_categoria, ca.nombre_categoria, count(*) as 'n° ventas', 
+           SUM(dv.cantidad * dv.precio_unitario) as 'total_venta' 
+    FROM detalle_ventas dv
+    INNER JOIN productos p ON dv.id_producto = p.id_producto
+    INNER JOIN categorias ca ON p.id_categoria = ca.id_categoria
+    GROUP BY ca.id_categoria
+    ORDER BY 4 DESC
+    """
+    
+    with st.expander("🔍 Ver consulta SQL"):
+        st.code(sql_query, language="sql")
+    
+    # Ejecutar y mostrar resultados
+    df = execute_query(sql_query)
+    if not df.empty:
+        st.dataframe(df.style.format({"total_venta": "S/. {:.2f}"}), use_container_width=True)
+    else:
+        st.warning("No se encontraron datos para mostrar.")
+
+# Pregunta 7: Mayor compra en cantidad
+with tab7:
+    st.header("7. ¿Cuál ha sido la compra con la mayor cantidad de productos?")
+    
+    # Mostrar la consulta SQL
+    sql_query = """
+    SELECT dv.id_venta, cli.nombre, SUM(dv.cantidad) as 'productos_vendidos' 
+    FROM detalle_ventas dv
+    INNER JOIN ventas v on dv.id_venta = v.id_venta
+    INNER JOIN clientes cli ON v.id_cliente = cli.id_cliente
+    GROUP BY dv.id_venta
+    HAVING SUM(dv.cantidad) = (
+        SELECT MAX(p_vendidos.productos_vendidos) FROM (
+            SELECT dv.id_venta, cli.nombre, SUM(dv.cantidad) as 'productos_vendidos'
+            FROM detalle_ventas dv
+            INNER JOIN ventas v on dv.id_venta = v.id_venta
+            INNER JOIN clientes cli ON v.id_cliente = cli.id_cliente
+            GROUP BY dv.id_venta
+        ) as p_vendidos
+    )
+    """
+    
+    with st.expander("🔍 Ver consulta SQL"):
+        st.code(sql_query, language="sql")
+    
+    # Ejecutar y mostrar resultados
+    df = execute_query(sql_query)
+    if not df.empty:
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.warning("No se encontraron datos para mostrar.")
 
 # Información adicional en la barra lateral
 with st.sidebar:
