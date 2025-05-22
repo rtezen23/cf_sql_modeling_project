@@ -1,11 +1,17 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
+import os
+
+# Obtener la ruta absoluta del directorio donde se encuentra este script
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Construir la ruta al archivo de la base de datos
+DB_PATH = os.path.join(BASE_DIR, "tienda.db")
 
 def get_db_connection():
     """Establece conexión con la base de datos SQLite."""
     try:
-        conn = sqlite3.connect('tienda.db')
+        conn = sqlite3.connect(DB_PATH)
         # Verificar si la conexión es válida
         conn.cursor().execute('SELECT 1')
         return conn
@@ -48,7 +54,7 @@ st.markdown("---")
 def get_db_connection():
     """Establece conexión con la base de datos SQLite."""
     try:
-        conn = sqlite3.connect('tienda.db')
+        conn = sqlite3.connect(DB_PATH)
         # Verificar si la conexión es válida
         conn.cursor().execute('SELECT 1')
         return conn
