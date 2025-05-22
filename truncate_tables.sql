@@ -17,3 +17,23 @@ DELETE FROM sqlite_sequence;
 
 -- Reactivamos las restricciones de clave foránea
 PRAGMA foreign_keys = ON; 
+
+
+PRAGMA table_info(detalle_ventas);
+
+.tables
+
+.schema detalle_ventas
+
+SELECT 
+    m.name AS tabla,
+    p.name AS columna,
+    p.type AS tipo
+FROM 
+    sqlite_master m
+JOIN 
+    pragma_table_info(m.name) p
+WHERE 
+    m.type = 'table'
+ORDER BY 
+    m.name, p.cid;

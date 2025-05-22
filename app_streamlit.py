@@ -12,19 +12,35 @@ st.set_page_config(
 
 def get_db_connection():
     """Establece conexión con la base de datos SQLite."""
-    return sqlite3.connect('tienda.db')
+    try:
+        conn = sqlite3.connect('tienda.db')
+        # Verificar si la conexión es válida
+        conn.cursor().execute('SELECT 1')
+        return conn
+    except sqlite3.Error as e:
+        st.error(f"Error al conectar a la base de datos: {e}")
+        st.warning("Asegúrate de que el archivo 'tienda.db' existe en el directorio del proyecto.")
+        return None
 
 def execute_query(query, params=None):
     """Ejecuta una consulta SQL y devuelve los resultados en un DataFrame."""
     conn = get_db_connection()
+    if conn is None:
+        return pd.DataFrame()  # Retorna un DataFrame vacío si no hay conexión
+        
     try:
         if params:
             df = pd.read_sql_query(query, conn, params=params)
         else:
             df = pd.read_sql_query(query, conn)
         return df
+    except sqlite3.Error as e:
+        st.error(f"Error al ejecutar la consulta: {e}")
+        st.code(query)  # Muestra la consulta que falló
+        return pd.DataFrame()  # Retorna un DataFrame vacío en caso de error
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 # Título de la aplicación
 st.title("📊 Análisis de Ventas - Tienda de Abarrotes y Papelería")
@@ -191,25 +207,36 @@ with tab6:
     st.header("6. Productos por proveedor")
     
     # Primero obtenemos los proveedores para el selector
-    proveedores = execute_query("SELECT id_proveedor, nombre FROM proveedores")
+    proveedores = execute_query("""
+        SELECT id_proveedor, nombre_proveedor 
+        FROM proveedores 
+        ORDER BY nombre_proveedor
+    """)
+    
+    if proveedores.empty or 'nombre_proveedor' not in proveedores.columns:
+        st.warning("No se encontraron proveedores en la base de datos o la estructura no es la esperada.")
+        st.stop()
+    
     proveedor_seleccionado = st.selectbox(
         'Selecciona un proveedor:',
-        proveedores['nombre'].tolist()
+        proveedores['nombre_proveedor'].tolist()
     )
     
     # Obtenemos el ID del proveedor seleccionado
-    proveedor_id = proveedores[proveedores['nombre'] == proveedor_seleccionado]['id_proveedor'].iloc[0]
+    proveedor_id = proveedores[proveedores['nombre_proveedor'] == proveedor_seleccionado]['id_proveedor'].iloc[0]
     
     # Consulta para obtener los productos del proveedor seleccionado
     query = """
     SELECT p.id_producto, p.nombre_producto, p.precio_venta, 
-           COUNT(dv.id_detalle) as veces_vendido,
-           SUM(dv.cantidad) as unidades_vendidas,
-           SUM(dv.precio_unitario * dv.cantidad) as ingreso_total
+           COUNT(DISTINCT dv.id_detalle_venta) as veces_vendido,
+           IFNULL(SUM(dv.cantidad), 0) as unidades_vendidas,
+           IFNULL(SUM(dv.precio_unitario * dv.cantidad), 0) as ingreso_total
     FROM productos p
+    INNER JOIN detalle_compras dc ON p.id_producto = dc.id_producto
+    INNER JOIN compras c ON dc.id_compra = c.id_compra
     LEFT JOIN detalle_ventas dv ON p.id_producto = dv.id_producto
-    WHERE p.id_proveedor = ?
-    GROUP BY p.id_producto
+    WHERE c.id_proveedor = ?
+    GROUP BY p.id_producto, p.nombre_producto, p.precio_venta
     ORDER BY veces_vendido DESC
     """
     df = execute_query(query, (proveedor_id,))
