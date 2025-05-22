@@ -8,38 +8,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Construir la ruta al archivo de la base de datos
 DB_PATH = os.path.join(BASE_DIR, "tienda.db")
 
-def get_db_connection():
-    """Establece conexión con la base de datos SQLite."""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        # Verificar si la conexión es válida
-        conn.cursor().execute('SELECT 1')
-        return conn
-    except sqlite3.Error as e:
-        st.error(f"Error al conectar a la base de datos: {e}")
-        st.warning("Asegúrate de que el archivo 'tienda.db' existe en el directorio del proyecto.")
-        return None
-
-def execute_query(query, params=None):
-    """Ejecuta una consulta SQL y devuelve los resultados en un DataFrame."""
-    conn = get_db_connection()
-    if conn is None:
-        return pd.DataFrame()  # Retorna un DataFrame vacío si no hay conexión
-        
-    try:
-        if params:
-            df = pd.read_sql_query(query, conn, params=params)
-        else:
-            df = pd.read_sql_query(query, conn)
-        return df
-    except sqlite3.Error as e:
-        st.error(f"Error al ejecutar la consulta: {e}")
-        st.code(query)  # Muestra la consulta que falló
-        return pd.DataFrame()  # Retorna un DataFrame vacío en caso de error
-    finally:
-        if conn:
-            conn.close()
-
 # Configuración de la página
 st.set_page_config(
     page_title="Examen SQL - Tienda",
@@ -47,20 +15,57 @@ st.set_page_config(
     layout="wide"
 )
 
-# Título de la aplicación
-st.title("📊 Examen SQL - Análisis de Tienda")
-st.markdown("---")
-
 def get_db_connection():
     """Establece conexión con la base de datos SQLite."""
+    st.write(f"Intentando conectar a: {DB_PATH}") # Para depuración
+    
+    if not os.path.exists(DB_PATH):
+        st.error(f"¡ERROR CRÍTICO! El archivo de base de datos NO se encuentra en: {DB_PATH}")
+        # Lista los archivos en el directorio base para ver qué hay realmente allí
+        try:
+            st.info(f"Contenido del directorio '{BASE_DIR}': {os.listdir(BASE_DIR)}")
+        except Exception as list_err:
+            st.warning(f"No se pudo listar el contenido del directorio {BASE_DIR}: {list_err}")
+        return None
+    else:
+        # Muestra el tamaño del archivo para asegurarte de que no es un archivo vacío.
+        file_size = os.path.getsize(DB_PATH)
+        st.success(f"Archivo de base de datos ENCONTRADO en: {DB_PATH} (Tamaño: {file_size} bytes)")
+        if file_size == 0:
+            st.warning("Advertencia: El archivo de base de datos tiene un tamaño de 0 bytes. ¿Está vacío?")
+
     try:
-        conn = sqlite3.connect(DB_PATH)
-        # Verificar si la conexión es válida
-        conn.cursor().execute('SELECT 1')
+        # -- CAMBIO IMPORTANTE AQUÍ --
+        # Conectar usando formato URI para especificar modo de solo lectura (ro)
+        # Esto es crucial para entornos de solo lectura como Render.
+        conn_uri = f"file:{DB_PATH}?mode=ro"
+        # Alternativa (aún más estricta si estás 100% seguro de que el archivo no cambiará):
+        # conn_uri = f"file:{DB_PATH}?immutable=1"
+        
+        conn = sqlite3.connect(conn_uri, uri=True)
+        
+        # Verificar si la conexión es válida y si la tabla específica existe
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='detalle_ventas';")
+        table_exists = cursor.fetchone()
+        
+        if table_exists:
+            st.success("Conexión exitosa a SQLite y la tabla 'detalle_ventas' FUE encontrada.")
+        else:
+            st.error("Conexión exitosa a SQLite, PERO la tabla 'detalle_ventas' NO FUE encontrada.")
+            # Listar todas las tablas encontradas para ayudar a depurar
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            all_tables = cursor.fetchall()
+            st.info(f"Tablas encontradas en la base de datos: {all_tables}")
+            if not all_tables:
+                st.warning("La base de datos parece estar vacía (no se encontraron tablas).")
+
         return conn
     except sqlite3.Error as e:
-        st.error(f"Error al conectar a la base de datos: {e}")
-        st.warning("Asegúrate de que el archivo 'tienda.db' existe en el directorio del proyecto.")
+        st.error(f"Error de SQLite al conectar o verificar la tabla: {e}")
+        return None
+    except Exception as e: # Captura otros posibles errores en la conexión
+        st.error(f"Error inesperado durante la configuración de la conexión: {e}")
         return None
 
 def execute_query(query, params=None):
